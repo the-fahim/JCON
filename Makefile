@@ -1,35 +1,33 @@
 CC = clang
-CFLAGS = -Wall -Wextra -g
-BUILD_DIR = build
-SRC_DIR = examples
-LIB_HEADER = datastructure.h
+AR = ar
+CPPFLAGS = -Iinclude
+CFLAGS = -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
+BUILD = build
 
-# Get a list of all C files in the examples folder
-SRCS = $(wildcard $(SRC_DIR)/*.c)
+.PHONY: all test sanitize clean
+all: $(BUILD)/j1 $(BUILD)/libjson.a
 
-# Generate corresponding object file names in the build folder
-OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+$(BUILD):
+	mkdir -p $@
 
-# Generate corresponding executable names in the build folder
-EXECS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%,$(SRCS))
+$(BUILD)/json.o: src/json.c include/json.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-# Targets
-all: $(EXECS)
+$(BUILD)/libjson.a: $(BUILD)/json.o
+	$(AR) rcs $@ $^
 
-# Compile each source file into object files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(LIB_HEADER) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I. -c $< -o $@
+$(BUILD)/j1: src/main.c $(BUILD)/json.o include/json.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) src/main.c $(BUILD)/json.o $(LDLIBS) -o $@
 
-# Link each object file into executables
-$(BUILD_DIR)/%: $(BUILD_DIR)/%.o
-	$(CC) $(CFLAGS) $< -o $@
+$(BUILD)/test_json: tests/test_json.c $(BUILD)/json.o include/json.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) tests/test_json.c $(BUILD)/json.o $(LDLIBS) -o $@
 
-# Create build directory if it doesn't exist
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+test: $(BUILD)/test_json $(BUILD)/j1
+	./$(BUILD)/test_json
+	sh tests/cli.sh ./$(BUILD)/j1
 
-# Clean up the build directory
+sanitize:
+	$(MAKE) BUILD=build/sanitize CFLAGS='-std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -fsanitize=address,undefined -fno-omit-frame-pointer' test
+
 clean:
-	rm -rf $(BUILD_DIR)
-
-.PHONY: all clean
+	rm -rf build
